@@ -19,6 +19,7 @@ requests // table name
     | where string_attr 	contains '2770236226'
 	| where string_attr 	startswith "E33LB"
 	| where isempty(attribute_name) or isnull(attribute_name) or attribute_name == ""
+	| where isnotempty(attribute_name) 
 	
 //// new attributes
 
