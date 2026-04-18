@@ -1,0 +1,153 @@
+// constants
+let API_ENDPOINT        = 'endpoint';           
+let TIME_PERIOD         = 1h;                       
+let START_DATE          = datetime('2022-06-01');
+let END_DATE            = datetime('2022-07-01');
+
+// start query
+requests // table name
+
+//// filters
+  | where name 			== API_ENDPOINT
+  | where timestamp 		>= ago(TIME_PERIOD)
+  | where timestamp 		>= START_DATE
+  | where timestamp 		< END_DATE
+	| where zip_code 		in ('08756', '28034', '28100', '28110', '28770')
+	| where attribute_name 	!= 0
+	| where is_something 	== True
+	| where attribute_name 	<> '1' and ((attribute_name == '3') or (attribute_name == '2'))
+  | where string_attr 	contains '2770236226'
+	| where string_attr 	startswith "E33LB"
+	| where isempty(attribute_name) or isnull(attribute_name) or attribute_name == ""
+	
+//// new attributes
+
+// JSON
+  | extend json_attr		   		= parse_json(tostring(something['json_body']))
+  | extend attribute_name         = json_attr['something']['attribute_name']
+  // first element in Array
+	| extend attribute_name         = json_attr['something'][0]['attribute_name']
+
+// CASE WHEN and IIF
+  | extend success_string 		= case(success == True, 'Correct', 'Error')
+	| extend attribute_name 		= case(other =="1", "One", other == "2", "Two", "Other")
+	| extend success_string   		= iif(success == True, 'Correct', 'Error')
+
+// DATA Types
+  | extend attribute_name     	= tostring(attribute_name)
+  | extend attribute_name         = todouble(attribute_name / 100.00)
+	| extend attribute_name         = toint(attribute_name)
+	| extend attribute_name         = long(null)
+	| extend attribute_name         = dynamic(null)
+	| extend attribute_type         = gettype(attribute_name)
+
+// Search
+	| extend attribute_name         = indexof(where_to_search_string, what_to_search_string)
+
+// STRINGS
+  | extend attribute_name         = trim(@'[\d]+', attribute_name)  // exclude digits
+	| extend attribute_name         = split(attribute_name, "|")[1] // split value using "|" (-> array) and take 2nd value from array
+	| extend attribute_name         = substring(attribute_name, 4) // 4 - startingIndex, if the 3rd arg is null -> until the end of string 
+	| extend attribute_name			= strcat(attribute_name1, attribute_name2, attribute_name3) // Concatenates between 1 and 64 arguments.
+  | parse message with * "Complete Request Body: " requestBody  // Evaluates a string expression and parses its value into one or more calculated columns. 
+	// Regex example
+	| extend attribute_name			= extract(@'asd\\\\" : \\\\"([A-Za-z]+)', 1, string_attr) //Get a match for a regular expression from a source string.
+	| extend Event_Date_2 			= extract(@'eventDate\\":\\"([0-9A-Za-z_-:]+)', 1, tostring(customDimensions.["Request-Body"]))
+	| extend Event_Date_1 			= extract(@"eventDate(\S+)Z\\", 1, tostring(customDimensions.["Request-Body"]))  //"eventDate\":\"2026-03-12T08:51:23.93Z\"
+// DATES
+  | extend timestamp_day 			= startofday(timestamp)
+	| extend datetime_hour          = hourofday(timestamp)	
+	| extend datetime_format		= format_datetime(timestamp, 'yyyy-MM-dd HH:mm:ss')
+	| extend timestamp_day 			= format_datetime(timestamp, 'yyyy-M-d')
+	
+// NUMBERS
+	| extend total_value			= round(total_value, 2)
+	| extend total_value          	= total_value / 100.00
+	| extend total_value 			= total_item_price + total_ship_fee
+// HASH
+	| extend hash_value             = hash_sha256(attribute_name)
+	
+// ARRAYS
+  | extend array_len_cnt         	= array_length(array_list)
+	| extend outliers				= series_outliers(series)
+	| extend attribute_name			= make_list(multi_values_field)
+	| extend attribute_name			= make_set(multi_values_field)
+	| extend attribute_name			= strcat_array(multi_values_field, " : ")
+	
+	// Applies a subquery to each record, and returns the union of the results of all subqueries.
+	| mv-apply new = attribute_name_test_mv on
+        (
+            summarize   total_value = sum(attribute_name),
+                        total_cnt 	= dcount(attribute_name)
+        )
+	// Expands multi-value dynamic arrays or property bags into multiple records.
+	| mv-expand attribute_name_test_mv
+	
+// select
+  | project attribute_name1, attribute_name2, attribute_name3
+	| order by timestamp desc
+// AGG
+	| summarize 
+	| summarize 
+			  count()
+			, attribute_name1 = sum(attribute_name1)
+			, attribute_name2 = dcount(attribute_name2)
+			, attribute_name2 = dcount(attribute_name2, 4) // 4 - precision
+			, attribute_name3 = count_distinct(attribute_name3)
+			, avg_duration 	  = avg(duration)
+			, median 		  = percentile(duration, 50)
+			, attribute_name3 = countif(attribute_name1 != "")
+		by    
+			  attribute_name4, attribute_name5,
+			, bin(timestamp, 5m) // split timestamp - 5 minutes buckets
+			
+//limit output
+	| limit 10
+
+// visualization
+	| render timechart  
+
+// Print
+print ipv4_is_private("43.250.165.48")
+
+
+///////////////////////////////////////////////////////////////////////////////////////
+// Outliers - series_outliers
+//////////////////////////////////////////////////////////////////////////////////////
+// 1 outlier
+  | summarize x      = make_list(groupby_field),
+              series = make_list(orders_cnt), 
+              list_of_multi_values = make_list(multi_list)
+  | extend outliers = series_outliers(series)
+  | mv-expand x, series, outliers to typeof(double), list_of_multi_values
+  | where outliers < -3 or outliers > 3
+	
+// 2 outliers	
+  | extend groupby_field 		= tostring(email)
+  | extend multi_values_field = tostring(phone)
+  | summarize   orders_cnt 	= dcount(tostring(order_id)), 
+                ip_cnt 		  = dcount(tostring(ip_address)), 
+                multi_list 	= strcat_array(make_set(multi_values_field), " : ") 
+             by 
+				        groupby_field
+  | summarize x_1      	  = make_list(groupby_field),
+                series_1 	= make_list(orders_cnt), 
+                series_2 	= make_list(ip_cnt), 
+                list_of_multi_values = make_list(multi_list)
+  | extend outliers_1 = series_outliers(series_1)
+  | extend outliers_2 = series_outliers(series_2)
+  | mv-expand x_1, series_1, outliers_1 to typeof(double), list_of_multi_values, series_2, outliers_2 to typeof(double)
+  | where outliers_1 < -5 or outliers_2 > 5
+	
+	
+///////////////////////////////////////////////////////////////////////////////////////
+// Visualization
+//////////////////////////////////////////////////////////////////////////////////////
+	| summarize 
+			    count_1	= todouble(count())
+	  		, count_all = todouble(count())
+      by 
+			    touch_point, bin(timestamp, 5m)
+  | extend missing_rate = round(count_1 / count_all * 100, 2)
+  | project timestamp, touch_point, missing_rate
+  | render timechart  
