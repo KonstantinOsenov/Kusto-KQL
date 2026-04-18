@@ -46,7 +46,6 @@ requests // table name
 
 // STRINGS
     | extend attribute_name         = trim(@'[\d]+', attribute_name)  // exclude digits
-	| extend attribute_name         = split(attribute_name, "|")[1] // split value using "|" (-> array) and take 2nd value from array
 	| extend attribute_name         = substring(attribute_name, 4) // 4 - startingIndex, if the 3rd arg is null -> until the end of string 
 	| extend attribute_name			= strcat(attribute_name1, attribute_name2, attribute_name3) // Concatenates between 1 and 64 arguments.
     | parse message with * "Complete Request Body: " requestBody  // Evaluates a string expression and parses its value into one or more calculated columns. 
@@ -73,6 +72,7 @@ requests // table name
 	| extend attribute_name			= make_list(multi_values_field)
 	| extend attribute_name			= make_set(multi_values_field)
 	| extend attribute_name			= strcat_array(multi_values_field, " : ")
+	| extend attribute_name         = split(attribute_name, "|")[1] // split value using "|" (-> array) and take 2nd value from array
 	
 	// Applies a subquery to each record, and returns the union of the results of all subqueries.
 	| mv-apply new = attribute_name_test_mv on
